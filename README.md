@@ -89,7 +89,28 @@ Install-Package MauiNativePdfView
 
 ## 🚀 Quick Start
 
-### 1. Add Namespace
+### 1. Add Handler
+
+```csharp
+public static class MauiProgram
+{
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+        builder
+            .UseMauiApp<App>()
+            .UseMauiNativePdfView() // <--- ADD THIS LINE
+            .ConfigureFonts(fonts =>
+            {
+                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+            });
+
+        return builder.Build();
+    }
+}
+```
+
+### 2. Add Namespace
 
 **Option A: Custom Schema (Recommended)**
 
@@ -103,7 +124,7 @@ xmlns:pdf="http://eightbot.com/maui/pdfview"
 xmlns:pdf="clr-namespace:MauiNativePdfView;assembly=MauiNativePdfView"
 ```
 
-### 2. Basic XAML
+### 3. Basic XAML
 
 ```xml
 <!-- Simple string binding - auto-converts to PdfSource! -->
@@ -135,7 +156,7 @@ The library supports automatic string conversion in XAML:
 <pdf:PdfView Source="file:///path/to/document.pdf" />
 ```
 
-### 3. Load a PDF (Code-Behind)
+### 4. Load a PDF (Code-Behind)
 
 ```csharp
 // From file
@@ -157,7 +178,7 @@ pdfViewer.Source = PdfSource.FromBytes(pdfBytes);
 pdfViewer.Source = PdfSource.FromFile("/path/to/encrypted.pdf", "password");
 ```
 
-### 4. Handle Events
+### 5. Handle Events
 
 ```csharp
 private void OnDocumentLoaded(object sender, DocumentLoadedEventArgs e)
