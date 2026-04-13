@@ -320,6 +320,13 @@ public class PdfViewAndroid : IPdfView, IDisposable
             configurator.Password(_source.Password);
         }
 
+        var nativeFitPolicy = _fitPolicy switch
+        {
+            Abstractions.FitPolicy.Height => Com.Ahmer.Pdfviewer.Util.FitPolicy.Height,
+            Abstractions.FitPolicy.Both => Com.Ahmer.Pdfviewer.Util.FitPolicy.Both,
+            _ => Com.Ahmer.Pdfviewer.Util.FitPolicy.Width,
+        };
+
         configurator
             .EnableSwipe(_enableSwipe)
             .EnableDoubleTap(_enableZoom)
@@ -331,6 +338,7 @@ public class PdfViewAndroid : IPdfView, IDisposable
             .PageFling(enablePageFling)
             .NightMode(false)
             .FitEachPage(false)
+            .PageFitPolicy(nativeFitPolicy)
             .EnableAntialiasing(_enableAntialiasing)
             .OnLoad(new LoadCompleteListener(this, pageToRestore))
             .OnPageChange(new PageChangeListener(this))
