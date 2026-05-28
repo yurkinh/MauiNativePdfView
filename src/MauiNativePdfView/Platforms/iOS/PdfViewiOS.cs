@@ -24,6 +24,7 @@ public class PdfViewiOS : IPdfView, IDisposable
     private FitPolicy _fitPolicy = FitPolicy.Width;
     private bool _needsFitReapply = false;
     private PageAlignment _pageAlignment = PageAlignment.Default;
+    private Color? _backgroundColor;
 
     public PdfViewiOS()
     {
@@ -165,6 +166,7 @@ public class PdfViewiOS : IPdfView, IDisposable
         {
             _fitPolicy = value;
             ApplyFitPolicy();
+            _pdfView.SetNeedsLayout();
         }
     }
 
@@ -254,6 +256,7 @@ public class PdfViewiOS : IPdfView, IDisposable
                 Abstractions.PdfDisplayMode.SinglePageContinuous => PdfKit.PdfDisplayMode.SinglePageContinuous,
                 _ => PdfKit.PdfDisplayMode.SinglePageContinuous
             };
+            _pdfView.SetNeedsLayout();
         }
     }
 
@@ -266,6 +269,7 @@ public class PdfViewiOS : IPdfView, IDisposable
             _pdfView.DisplayDirection = value == PdfScrollOrientation.Horizontal
                 ? PdfDisplayDirection.Horizontal
                 : PdfDisplayDirection.Vertical;
+            _pdfView.SetNeedsLayout();
         }
     }
 
@@ -289,15 +293,10 @@ public class PdfViewiOS : IPdfView, IDisposable
 
     public Color? BackgroundColor
     {
-        get => _pdfView.BackgroundColor != null
-            ? Color.FromRgba(
-                _pdfView.BackgroundColor.CGColor.Components[0],
-                _pdfView.BackgroundColor.CGColor.Components[1],
-                _pdfView.BackgroundColor.CGColor.Components[2],
-                _pdfView.BackgroundColor.CGColor.Alpha)
-            : null;
+        get => _backgroundColor;
         set
         {
+            _backgroundColor = value;
             if (value != null)
             {
                 _pdfView.BackgroundColor = UIColor.FromRGBA(
@@ -305,6 +304,7 @@ public class PdfViewiOS : IPdfView, IDisposable
                     (float)value.Green,
                     (float)value.Blue,
                     (float)value.Alpha);
+                _pdfView.SetNeedsDisplay();
             }
         }
     }
@@ -332,6 +332,11 @@ public class PdfViewiOS : IPdfView, IDisposable
 
             _pageAlignment = value;
             ApplyPageAlignment();
+            // Force a layout pass so PdfKit immediately repositions content.
+            // This is especially important when switching away from Top back to
+            // Default/Center — without it the page stays pinned until the next
+            // natural layout event (scroll, resize, etc.).
+            _pdfView.SetNeedsLayout();
         }
     }
 
