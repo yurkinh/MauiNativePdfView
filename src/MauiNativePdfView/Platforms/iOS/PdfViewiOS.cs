@@ -23,6 +23,7 @@ public class PdfViewiOS : IPdfView, IDisposable
     private bool _enableTapGestures = true;
     private FitPolicy _fitPolicy = FitPolicy.Width;
     private bool _needsFitReapply = false;
+    private PageAlignment _pageAlignment = PageAlignment.Default;
 
     public PdfViewiOS()
     {
@@ -34,10 +35,14 @@ public class PdfViewiOS : IPdfView, IDisposable
         };
 
         // Re-apply deferred fit policy once the view has been laid out and has real bounds.
+        // Page alignment is re-applied every layout pass so it survives PdfKit's
+        // internal re-centering when the document or scale changes.
         _pdfView.LayoutSubviewsAction = () =>
         {
             if (_needsFitReapply)
                 ApplyFitPolicy();
+
+            ApplyPageAlignment();
         };
 
         // Subscribe to page change notifications
@@ -315,6 +320,68 @@ public class PdfViewiOS : IPdfView, IDisposable
                 UpdateAnnotationVisibility();
             }
         }
+    }
+
+    public PageAlignment PageAlignment
+    {
+        get => _pageAlignment;
+        set
+        {
+            if (_pageAlignment == value)
+                return;
+
+            _pageAlignment = value;
+            ApplyPageAlignment();
+        }
+    }
+
+    /// <summary>
+    /// PdfKit centers a single short page vertically inside its inner UIScrollView.
+    /// To force top alignment we set the scroll view's bottom content inset to the
+    /// remaining vertical space so the page no longer needs to be centered.
+    /// For <see cref="PageAlignment.Default"/> and <see cref="PageAlignment.Center"/>
+    /// we leave PdfKit's defaults untouched.
+    /// </summary>
+    private void ApplyPageAlignment()
+    {
+        var scrollView = FindInnerScrollView(_pdfView);
+        if (scrollView == null)
+            return;
+
+        var viewHeight = scrollView.Bounds.Height;
+        var contentHeight = scrollView.ContentSize.Height;
+        if (viewHeight <= 0 || contentHeight <= 0)
+            return;
+
+        var defaultInset = new UIEdgeInsets(0, scrollView.ContentInset.Left, 0, scrollView.ContentInset.Right);
+
+        if (_pageAlignment != PageAlignment.Top || contentHeight >= viewHeight)
+        {
+            // Restore platform defaults if we previously modified them.
+            if (scrollView.ContentInset.Top != 0 || scrollView.ContentInset.Bottom != 0)
+                scrollView.ContentInset = defaultInset;
+            return;
+        }
+
+        // Add padding below the content so the page sits at the top. We also pin
+        // the content offset to the top in case PdfKit had already scrolled to center.
+        var slack = viewHeight - contentHeight;
+        scrollView.ContentInset = new UIEdgeInsets(0, defaultInset.Left, slack, defaultInset.Right);
+        scrollView.ContentOffset = new CoreGraphics.CGPoint(scrollView.ContentOffset.X, -scrollView.AdjustedContentInset.Top);
+    }
+
+    private static UIScrollView? FindInnerScrollView(UIView view)
+    {
+        if (view is UIScrollView sv)
+            return sv;
+
+        foreach (var sub in view.Subviews)
+        {
+            var found = FindInnerScrollView(sub);
+            if (found != null)
+                return found;
+        }
+        return null;
     }
 
     public event EventHandler<DocumentLoadedEventArgs>? DocumentLoaded;

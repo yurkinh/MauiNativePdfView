@@ -34,6 +34,7 @@ public class PdfViewAndroid : IPdfView, IDisposable
     private bool _useBestQuality = true;
     private Color? _backgroundColor;
     private bool _enableAnnotationRendering = true;
+    private PageAlignment _pageAlignment = PageAlignment.Default;
     private int _currentPage = 0;
     private int _pageCount = 0;
 
@@ -252,6 +253,36 @@ public class PdfViewAndroid : IPdfView, IDisposable
         }
     }
 
+    public PageAlignment PageAlignment
+    {
+        get => _pageAlignment;
+        set
+        {
+            if (_pageAlignment == value)
+                return;
+
+            _pageAlignment = value;
+            if (_pageCount > 0)
+                ApplyPageAlignment();
+        }
+    }
+
+    /// <summary>
+    /// AhmerPdfium centers a page that is shorter than the viewport. For
+    /// <see cref="PageAlignment.Top"/> we scroll the view to (0, 0) after
+    /// load so the page sits flush with the top of the viewport.
+    /// </summary>
+    private void ApplyPageAlignment()
+    {
+        if (_pageAlignment != PageAlignment.Top)
+            return;
+
+        // Run on the UI thread once layout has settled. MoveTo with animation = false
+        // jumps without smoothing; the library re-clamps the offset if content is
+        // larger than the viewport, so this is a no-op for tall documents.
+        _pdfView.Post(() => _pdfView.MoveTo(0f, 0f, false));
+    }
+
     public event EventHandler<DocumentLoadedEventArgs>? DocumentLoaded;
     public event EventHandler<PageChangedEventArgs>? PageChanged;
     public event EventHandler<PdfErrorEventArgs>? Error;
@@ -365,6 +396,7 @@ public class PdfViewAndroid : IPdfView, IDisposable
     private void OnDocumentLoaded(int pageCount)
     {
         _pageCount = pageCount;
+        ApplyPageAlignment();
         DocumentLoaded?.Invoke(this, new DocumentLoadedEventArgs(pageCount));
     }
 
@@ -378,6 +410,7 @@ public class PdfViewAndroid : IPdfView, IDisposable
             _pdfView.JumpTo(pageToRestore);
         }
 
+        ApplyPageAlignment();
         DocumentLoaded?.Invoke(this, new DocumentLoadedEventArgs(pageCount));
     }
 
@@ -405,6 +438,9 @@ public class PdfViewAndroid : IPdfView, IDisposable
 
     private void OnRendered(int pageCount)
     {
+        // Re-apply once after the first render — the library may center the page
+        // again as part of its post-render layout pass.
+        ApplyPageAlignment();
         Rendered?.Invoke(this, new RenderedEventArgs(pageCount));
     }
 
