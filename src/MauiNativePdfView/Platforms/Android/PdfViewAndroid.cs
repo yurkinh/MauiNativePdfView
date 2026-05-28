@@ -268,14 +268,16 @@ public class PdfViewAndroid : IPdfView, IDisposable
     }
 
     /// <summary>
-    /// AhmerPdfium clamps the scroll offset to keep a short page vertically centered
-    /// in the viewport, so <c>MoveTo(0, 0)</c> doesn't stick. Instead, when
-    /// <see cref="PageAlignment.Top"/> is requested we shrink the native view's
-    /// layout height to exactly the rendered page height — once the viewport matches
-    /// the page, the library's centering math has zero slack to consume and MAUI's
-    /// parent layout naturally places the (now-shorter) PDFView at the top of its
-    /// allocated space. For <see cref="PageAlignment.Default"/> and
-    /// <see cref="PageAlignment.Center"/> we restore MATCH_PARENT.
+    /// AhmerPdfium clamps the scroll offset to keep a short page centered, and MAUI
+    /// overrides any LayoutParameters change with its own Layout() call, so neither
+    /// MoveTo nor LayoutParameters.Height work as alignment hooks.
+    ///
+    /// Instead we use <see cref="global::Android.Views.View.TranslationY"/> — a pure
+    /// visual transform that shifts the entire native view (and its drawn page) up
+    /// by half the slack. The library still centers the page within its own viewport,
+    /// but the translated view places that centered page flush with the top of the
+    /// MAUI control's allocated area. The corresponding empty area moves below the
+    /// MAUI control's bounds, where the parent's background shows through.
     /// </summary>
     private void ApplyPageAlignment()
     {
@@ -284,21 +286,13 @@ public class PdfViewAndroid : IPdfView, IDisposable
 
     private void ApplyPageAlignmentOnUiThread()
     {
-        var lp = _pdfView.LayoutParameters;
-        if (lp == null)
-            return;
-
         if (_pageAlignment != PageAlignment.Top || _pageCount == 0)
         {
-            if (lp.Height != global::Android.Views.ViewGroup.LayoutParams.MatchParent)
-            {
-                lp.Height = global::Android.Views.ViewGroup.LayoutParams.MatchParent;
-                _pdfView.LayoutParameters = lp;
-            }
+            if (_pdfView.TranslationY != 0f)
+                _pdfView.TranslationY = 0f;
             return;
         }
 
-        // Use the current page; for most short-PDF cases there is only one.
         int pageIndex = _currentPage >= 0 && _currentPage < _pageCount ? _currentPage : 0;
         var pageSize = _pdfView.GetPageSize(pageIndex);
         if (pageSize == null || pageSize.Width <= 0 || pageSize.Height <= 0)
@@ -309,31 +303,25 @@ public class PdfViewAndroid : IPdfView, IDisposable
         if (viewportWidth <= 0 || viewportHeight <= 0)
             return;
 
-        // Compute the rendered height for the current fit policy.
         float scale = _fitPolicy switch
         {
             Abstractions.FitPolicy.Height => viewportHeight / pageSize.Height,
             Abstractions.FitPolicy.Both => Math.Min(viewportWidth / pageSize.Width, viewportHeight / pageSize.Height),
             _ => viewportWidth / pageSize.Width,
         };
-        int renderedHeight = (int)Math.Ceiling(pageSize.Height * scale * _pdfView.Zoom);
+        float renderedHeight = pageSize.Height * scale * _pdfView.Zoom;
 
         if (renderedHeight <= 0 || renderedHeight >= viewportHeight)
         {
-            // Page already fills or exceeds the viewport — no centering happening, leave alone.
-            if (lp.Height != global::Android.Views.ViewGroup.LayoutParams.MatchParent)
-            {
-                lp.Height = global::Android.Views.ViewGroup.LayoutParams.MatchParent;
-                _pdfView.LayoutParameters = lp;
-            }
+            if (_pdfView.TranslationY != 0f)
+                _pdfView.TranslationY = 0f;
             return;
         }
 
-        if (lp.Height != renderedHeight)
-        {
-            lp.Height = renderedHeight;
-            _pdfView.LayoutParameters = lp;
-        }
+        float slack = viewportHeight - renderedHeight;
+        float translateY = -slack / 2f;
+        if (Math.Abs(_pdfView.TranslationY - translateY) > 0.5f)
+            _pdfView.TranslationY = translateY;
     }
 
     public event EventHandler<DocumentLoadedEventArgs>? DocumentLoaded;
