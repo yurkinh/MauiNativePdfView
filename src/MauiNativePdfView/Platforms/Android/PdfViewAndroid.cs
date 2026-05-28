@@ -235,6 +235,7 @@ public class PdfViewAndroid : IPdfView, IDisposable
                     (int)(value.Green * 255),
                     (int)(value.Blue * 255));
                 _pdfView.SetBackgroundColor(androidColor);
+                _pdfView.Invalidate();
             }
         }
     }
